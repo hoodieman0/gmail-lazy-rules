@@ -169,3 +169,13 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# credentials and input emails
+credentials.json
+token.json
+inputs/
+
+venv-gmail-lazy-rules/
+
+# vscode build files
+.vscode
