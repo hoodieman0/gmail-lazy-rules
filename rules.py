@@ -143,13 +143,14 @@ def label_senders(service, senders: list[dict]) -> None:
 
 # region Subjects
 
-def label_subjects(service, subjects: list[dict]):
+def label_subjects(service, subjects: list[dict]) -> list:
     for sub in subjects:
         phrase = sub['contains']
         labels = sub['labels']
         to_inbox = sub['toInbox']
         label_ids = get_label_ids(service, labels)
 
+        filters = []
         for id in label_ids:
             body = {}
             if not to_inbox:
@@ -164,7 +165,7 @@ def label_subjects(service, subjects: list[dict]):
                     subject=phrase
                 )
 
-            try: create_filter(service, body)
+            try: filters.append(create_filter(service, body))
             except HttpError as error: print(f"An error occurred: {error}")
 
 # endregion
@@ -237,15 +238,22 @@ def main():
         # Save the credentials for the next run
         with open("token.json", "w") as token:
             token.write(creds.to_json())
-
+    
+    # Call the Gmail API
     try:
-        # Call the Gmail API
         service = build("gmail", "v1", credentials=creds)
-        data = get_json_data(JSON_PATH)
-        label_senders(service, data['senders'])
-        label_subjects(service, data['subjects'])
     except HttpError as error:
         print(f"An error occurred: {error}")
+
+    data = get_json_data(JSON_PATH)
+
+    try: label_senders(service, data['senders'])
+    except: print(f"An error occurred creating filter for senders: {error}")
+    
+    try: label_subjects(service, data['subjects'])
+    except: print(f"An error occurred creating filter for subjects: {error}")
+    
+    
 
 
 if __name__ == "__main__":
