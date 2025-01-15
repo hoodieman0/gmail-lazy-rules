@@ -13,9 +13,72 @@ JSON_PATH = 'inputs/examples.json'
 
 # If modifying these scopes, delete the file token.json.
 SCOPES = [
-    "https://www.googleapis.com/auth/gmail.labels",
-    "https://www.googleapis.com/auth/gmail.settings.basic",
+    'https://www.googleapis.com/auth/gmail.labels', # create labels
+    'https://www.googleapis.com/auth/gmail.settings.basic', # create filters
+    'https://www.googleapis.com/auth/gmail.modify' # updating threads
     ]
+
+# region Mail Threads
+def find_matching_threads(service, email: str=None, subject: str=None):
+    if email is None and subject is None:
+        raise Exception # need at least one query field
+    query_string = ''
+
+    if email is not None:
+        query_string += f'from:{email} '
+    
+    if subject is not None:
+        query_string += f'subject:{subject}'
+
+    return (
+        service
+        .users()
+        .threads()
+        .list(userId='me', q=query_string, maxResults=500)
+        .execute()
+    )
+
+def update_thread(service, thread_id: str, ids: list, to_inbox: bool):
+    """
+    TODO optionally label each message in the thread
+    Only works on the last 500 messages
+    """
+    body = { 'addLabelIds' : ids }
+    if not to_inbox:
+        body['removeLabelIds'] = ['INBOX']
+    (
+        service
+        .users()
+        .threads()
+        .modify(userId='me', id=thread_id, body=body)
+        .execute()
+    )
+
+def apply_sender_filters(service, senders: list):
+    for profile in senders:
+        email = profile['email']
+        labels = profile['labels']
+        to_inbox = profile['toInbox']
+        label_ids = get_label_ids(service, labels)
+        query_threads = find_matching_threads(service, email)
+        if query_threads['resultSizeEstimate'] == 0: 
+            continue # no messages matched the query
+        for thread in query_threads['threads']:
+            update_thread(service, thread['id'], label_ids, to_inbox)
+
+def apply_subject_filters(service, subjects: list):
+    for sub in subjects:
+        phrase = sub['contains']
+        labels = sub['labels']
+        to_inbox = sub['toInbox']
+        label_ids = get_label_ids(service, labels)
+        query_threads = find_matching_threads(service, subject=phrase)
+        if query_threads['resultSizeEstimate'] == 0: 
+            continue # no messages matched the query
+        for thread in query_threads['threads']:
+            update_thread(service, thread['id'], label_ids, to_inbox)
+
+# endregion
 
 # region Filters
 
@@ -150,7 +213,6 @@ def label_subjects(service, subjects: list[dict]) -> list:
         to_inbox = sub['toInbox']
         label_ids = get_label_ids(service, labels)
 
-        filters = []
         for id in label_ids:
             body = {}
             if not to_inbox:
@@ -165,7 +227,7 @@ def label_subjects(service, subjects: list[dict]) -> list:
                     subject=phrase
                 )
 
-            try: filters.append(create_filter(service, body))
+            try: create_filter(service, body)
             except HttpError as error: print(f"An error occurred: {error}")
 
 # endregion
@@ -253,6 +315,8 @@ def main():
     try: label_subjects(service, data['subjects'])
     except: print(f"An error occurred creating filter for subjects: {error}")
     
+    apply_sender_filters(service, data['senders'])
+    apply_subject_filters(service, data['subjects'])
     
 
 
