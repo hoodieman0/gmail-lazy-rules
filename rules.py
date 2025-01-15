@@ -17,11 +17,170 @@ SCOPES = [
     "https://www.googleapis.com/auth/gmail.settings.basic",
     ]
 
-def get_json_data(path: str):
+# region Filters
+
+def create_filter_body(
+        add_labels: list[str] = None, 
+        remove_labels: list[str] = None, 
+        to: str = None,
+        sender: str = None, 
+        subject: str = None,
+        has_attachment: bool = None,
+        size: int = None,
+        query: str = None,
+        negated_query: str = None
+        ) -> dict[str, any]:
+    """
+    Requires that either add_labels or remove_labels is not None.
+    Requires at least one of the criteria is filled.
+    """
+    if add_labels is None and remove_labels is None:
+        raise Exception # no label action to take
+
+    if (to is None 
+        and sender is None 
+        and subject is None 
+        and has_attachment is None 
+        and size is None 
+        and query is None 
+        and negated_query is None):
+        raise Exception # No criteria to filter
+
+    # A set of actions to perform on a message. 
+    # Action that the filter performs.
+    # Message matching criteria. 
+    # # Matching criteria for the filter.
+    body = { 'action' : {}, 'criteria' : {}}
+    
+    if add_labels is not None:
+        body['action']['addLabelIds'] = add_labels
+
+    if remove_labels is not None:
+        body['action']['removeLabelIds'] = remove_labels
+    # Resource definition for Gmail filters. 
+    # Filters apply to specific messages instead of an entire email thread.
+
+    if to is not None:
+        # The recipient's display name or email address. 
+        # Includes recipients in the "to", "cc", and "bcc" header fields. 
+        # You can use simply the local part of the email address. 
+        # For example, "example" and "example@" 
+        # both match "example@gmail.com". 
+        # This field is case-insensitive.
+        body['criteria']['to'] = to
+
+    if sender is not None:
+        # The sender's display name or email address.
+        body['criteria']['from'] = sender
+
+    if subject is not None:
+        # Case-insensitive phrase found in the message's subject. 
+        # Trailing and leading whitespace are be trimmed and 
+        # adjacent spaces are collapsed.
+        body['criteria']['subject'] = subject
+
+    if has_attachment is not None:
+        # Whether the message has any attachment.
+        body['criteria']['hasAttachment'] = has_attachment
+    
+    if size is not None:
+        # The size of the entire RFC822 message in bytes, 
+        # including all headers and attachments.
+        body['criteria']['size'] = size
+    
+    if query is not None:
+        # Only return messages matching the specified query. 
+        # Supports the same query format as the Gmail search box. 
+        # For example, "from:someuser@example.com rfc822msgid: is:unread".
+        body['criteria']['query'] = query
+    
+    if negated_query is not None:
+        # Only return messages not matching the specified query. 
+        # Supports the same query format as the Gmail search box. 
+        # For example, "from:someuser@example.com rfc822msgid: is:unread".
+        body['criteria']['negatedQuery'] = negated_query
+
+    return body
+
+def create_filter(service, body: dict):
+    return (
+        service.users()
+        .settings()
+        .filters()
+        .create(userId="me", body=body)
+        .execute()
+    )
+
+# endregion
+
+# region Senders
+
+def label_senders(service, senders: list[dict]) -> None:
+    for profile in senders:
+        email = profile['email']
+        labels = profile['labels']
+        to_inbox = profile['toInbox']
+        label_ids = get_label_ids(service, labels)
+
+        for id in label_ids:
+            body = {}
+            if not to_inbox:
+                body = create_filter_body(
+                    add_labels=[id], 
+                    remove_labels=['INBOX'], 
+                    sender=email
+                    )
+            else: 
+                body = create_filter_body(
+                    add_labels=[id], 
+                    sender=email
+                )
+
+            try: create_filter(service, body)
+            except HttpError as error: print(f"An error occurred: {error}")
+                
+# endregion
+
+# region Subjects
+
+def label_subjects(service, subjects: list[dict]):
+    for sub in subjects:
+        phrase = sub['contains']
+        labels = sub['labels']
+        to_inbox = sub['toInbox']
+        label_ids = get_label_ids(service, labels)
+
+        for id in label_ids:
+            body = {}
+            if not to_inbox:
+                body = create_filter_body(
+                    add_labels=[id], 
+                    remove_labels=['INBOX'], 
+                    subject=phrase
+                    )
+            else: 
+                body = create_filter_body(
+                    add_labels=[id], 
+                    subject=phrase
+                )
+
+            try: create_filter(service, body)
+            except HttpError as error: print(f"An error occurred: {error}")
+
+# endregion
+
+# region Input
+# Should ouptput a dict
+
+def get_json_data(path: str) -> dict:
     with open(path, 'r') as file:
         return json.load(file)
+    
+# endregion
 
-def get_email_labels(file_name: str) -> dict[str, list[str]]:
+# region Gmail Calls
+
+def get_email_labels(file_name: str) -> dict[str, list[str]]: # TODO create func
     result = {}
     with open(file_name, 'r') as file:
         while (line := file.readline()) != '':
@@ -29,22 +188,11 @@ def get_email_labels(file_name: str) -> dict[str, list[str]]:
             result[vals[0].strip()] = [tag.strip() for tag in vals[1:]]
     return result
 
-def get_email_filters(file_name: str):
-    raise NotImplementedError
-
 def get_existing_labels(service) -> list[str]:
     results = service.users().labels().list(userId="me").execute()
     labels = results.get("labels", [])
     if not labels: raise 'No Labels'
-    # return [label['name'] for label in labels]
     return labels
-
-def create_label(service, name: str) -> str:
-    body = {
-        'name' : name,
-    }
-    result = service.users().labels().create(userId="me", body=body).execute()
-    return result.get("id")
 
 def get_label_ids(service, labels: list[str]):
     ids = []
@@ -60,40 +208,12 @@ def get_label_ids(service, labels: list[str]):
             else: found = False
     return ids
 
-# region Filters
-def create_tag_filters(service, data: dict) -> None:
-    def create_filter(email: str, label_ids:list[str]):
-        for id in label_ids:
-            filter_content = {
-                "criteria": {"from": email},
-                "action": {
-                    "addLabelIds": [id],
-                    "removeLabelIds": ["INBOX"],
-                },
-            }
-            try:
-                result = (
-                    service.users()
-                    .settings()
-                    .filters()
-                    .create(userId="me", body=filter_content)
-                    .execute()
-                )
-            except: print(f'Failed to label emails from {email} with ID {id}.')
+def create_label(service, name: str) -> str:
+    body = { 'name' : name }
+    result = service.users().labels().create(userId="me", body=body).execute()
+    return result.get("id")
 
-    for profile in data['request']:
-        email = profile['email']
-        labels = profile['labels']
-        to_inbox = profile['toInbox']
-        label_ids = get_label_ids(service, labels)
-        
-        try:
-            create_filter(email, label_ids)
-        except HttpError as error:
-            print(f"An error occurred: {error}")
-
-    
-#endregion
+# endregion
 
 def main():
     """Shows basic usage of the Gmail API.
@@ -122,7 +242,8 @@ def main():
         # Call the Gmail API
         service = build("gmail", "v1", credentials=creds)
         data = get_json_data(JSON_PATH)
-        create_tag_filters(service, data)
+        label_senders(service, data['senders'])
+        label_subjects(service, data['subjects'])
     except HttpError as error:
         print(f"An error occurred: {error}")
 
