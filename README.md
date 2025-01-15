@@ -1,6 +1,11 @@
 # gmail-lazy-rules
 Python script to make gmail tags and rules updated.
 
+## Usage
+``` cmd
+python rules.py path/to/filters.json
+```
+
 ## Note
 To create sublabels, use the directory format. That is parentLabel/childLabel/grandchildLabel
 
