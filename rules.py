@@ -280,10 +280,20 @@ def main():
     """Shows basic usage of the Gmail API.
     Lists the user's Gmail labels.
     """
+
+    if len(sys.argv) < 1:
+        raise Exception # no args given
+    
+    JSON_PATH = sys.argv[1]
+    try: data = get_json_data(JSON_PATH)
+    except: 
+        print(f'Invalid json file')
+        raise Exception # Not a valid json file
+    
     creds = None
-  # The file token.json stores the user's access and refresh tokens, and is
-  # created automatically when the authorization flow completes for the first
-  # time.
+    # The file token.json stores the user's access and refresh tokens, and is
+    # created automatically when the authorization flow completes for the first
+    # time.
     if os.path.exists("token.json"):
         creds = Credentials.from_authorized_user_file("token.json", SCOPES)
     # If there are no (valid) credentials available, let the user log in.
@@ -305,8 +315,6 @@ def main():
     except HttpError as error:
         print(f"An error occurred: {error}")
 
-    JSON_PATH = sys.argv[1]
-    data = get_json_data(JSON_PATH)
 
     try: label_senders(service, data['senders'])
     except: print(f"An error occurred creating filter for senders: {error}")
