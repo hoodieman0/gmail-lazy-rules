@@ -1,2 +1,2 @@
 * Tag everything in already in there
-* Tag based on subject
+* Update tag colors
