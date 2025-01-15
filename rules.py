@@ -7,9 +7,7 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
 import json
-
-FROM_TAG_PATH = 'inputs/Tag-From.csv'
-JSON_PATH = 'inputs/examples.json'
+import sys
 
 # If modifying these scopes, delete the file token.json.
 SCOPES = [
@@ -307,6 +305,7 @@ def main():
     except HttpError as error:
         print(f"An error occurred: {error}")
 
+    JSON_PATH = sys.argv[1]
     data = get_json_data(JSON_PATH)
 
     try: label_senders(service, data['senders'])
