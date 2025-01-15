@@ -5,14 +5,14 @@ Python script to make gmail tags and rules updated.
 ### Json
 ```json
 {
-    "request" : [
+    "senders" : [
         { 
             "email" : "myemail1@gmail.com", 
             "labels" : [
                 "Testing", 
                 "Development"
                 ], 
-            "toInbox" : false 
+            "toInbox" : true 
         },
         { 
             "email" : "youremail2@gmail.com", 
@@ -21,6 +21,18 @@ Python script to make gmail tags and rules updated.
                 "Development", 
                 "Recovery Email"
                 ], 
+            "toInbox" : false 
+        }
+    ],
+    "subjects" : [
+        {
+            "contains" : "Hello" ,
+            "labels" : [ "Development" ],
+            "toInbox" : false 
+        },
+        {
+            "contains" : "World",
+            "labels" : [ "Testing" ],
             "toInbox" : false 
         }
     ]
