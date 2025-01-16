@@ -24,6 +24,9 @@ DEFAULT_BACKGROUND_COLOR = '#cccccc'
 
 # region Mail Threads
 def find_matching_threads(service, email: str=None, subject: str=None):
+    """
+    
+    """
     if email is None and subject is None:
         raise Exception # need at least one query field
     query_string = ''
@@ -68,7 +71,13 @@ def apply_sender_filters(service, senders: list):
         if query_threads['resultSizeEstimate'] == 0: 
             continue # no messages matched the query
         for thread in query_threads['threads']:
-            update_thread(service, thread['id'], label_ids, to_inbox)
+            try:
+                update_thread(service, thread['id'], label_ids, to_inbox)
+            except HttpError as error:
+                print(
+                    f'''Unable to add labels 
+                    to thread {thread['id']}: {error.reason}'''
+                )
 
 def apply_subject_filters(service, subjects: list):
     for sub in subjects:
@@ -80,7 +89,13 @@ def apply_subject_filters(service, subjects: list):
         if query_threads['resultSizeEstimate'] == 0: 
             continue # no messages matched the query
         for thread in query_threads['threads']:
-            update_thread(service, thread['id'], label_ids, to_inbox)
+            try:
+                update_thread(service, thread['id'], label_ids, to_inbox)
+            except HttpError as error:
+                print(
+                    f'''Unable to add labels 
+                    to thread {thread['id']}: {error.reason}'''
+                )
 
 # endregion
 
