@@ -25,7 +25,11 @@ DEFAULT_BACKGROUND_COLOR = '#cccccc'
 # region Mail Threads
 def find_matching_threads(service, email: str=None, subject: str=None):
     """
+    Construct a query and return matching threads (email chains) via the api 
     
+    service: gmail build resource object
+    email: email that filter queried threads by senders with that email
+    subject: words that filter queried threads by subjects with those words 
     """
     if email is None and subject is None:
         raise Exception # need at least one query field
@@ -45,23 +49,48 @@ def find_matching_threads(service, email: str=None, subject: str=None):
         .execute()
     )
 
-def update_thread(service, thread_id: str, ids: list, to_inbox: bool):
+def update_thread(
+    service, 
+    thread_id: str, 
+    label_ids: list[str], 
+    to_inbox: bool
+    ):
     """
-    TODO optionally label each message in the thread
-    Only works on the last 500 messages
+    Update the thread with the given ID with the given labels.
+    Note: Only works on the last 500 messages.
+
+    service: gmail build resource object
+    thread_id: the gmail thread id of the thread to update
+    label_ids: the gmail ids of the labels to apply to the thread
+    to_inbox: whether or not the thread keeps the INBOX label
     """
-    body = { 'addLabelIds' : ids }
+    body = { 'addLabelIds' : label_ids } 
     if not to_inbox:
         body['removeLabelIds'] = ['INBOX']
     (
         service
         .users()
         .threads()
-        .modify(userId='me', id=thread_id, body=body)
+        .modify(userId='me', id=thread_id, body=body) 
+        # TODO optionally label each message in the thread
         .execute()
     )
 
-def apply_sender_filters(service, senders: list):
+def apply_sender_filters(service, senders: list[dict]):
+    """
+    Given a list with valid 'sender' dicts, update threads matching the 
+    from criteria with corresponding labels.
+
+    service: gmail build resource object
+    senders: a list of dicts found from the inputted json file that tells how 
+    to filter the senders.
+    The dicts need the following structure:
+    {
+        'email' : string,
+        'labels' : list[str],
+        'toInbox' : bool
+    }
+    """
     for profile in senders:
         email = profile['email']
         labels = profile['labels']
@@ -79,7 +108,21 @@ def apply_sender_filters(service, senders: list):
                     to thread {thread['id']}: {error.reason}'''
                 )
 
-def apply_subject_filters(service, subjects: list):
+def apply_subject_filters(service, subjects: list[dict]):
+    """
+    Given a list with valid 'subject' dicts, update threads matching the 
+    subject criteria with corresponding labels.
+
+    service: gmail build resource object
+    subjects: a list of dicts found from the inputted json file that tells how 
+    to filter the subjects.
+    The dicts need the following structure:
+    {
+        'contains' : string,
+        'labels' : list[str],
+        'toInbox' : bool
+    }
+    """
     for sub in subjects:
         phrase = sub['contains']
         labels = sub['labels']
@@ -113,8 +156,19 @@ def create_filter_body(
         negated_query: str = None
         ) -> dict[str, any]:
     """
-    Requires that either add_labels or remove_labels is not None.
-    Requires at least one of the criteria is filled.
+    Format a dict that works the the gmail api filter().create() function.
+    Note: Requires that either add_labels or remove_labels is not None.
+    Note: Requires at least one of the criteria is filled.
+
+    add_labels: the label ids to add to filtered messages
+    remove_labels: the label ids to remove from filtered messages
+    to: criteria that filters by who message is sent to
+    sender: criteria that filters by who sent the message
+    subject: criteria that filters by the subject of the message
+    has_attachment: criteria that filters if the message has an attachment
+    size: criteria that filters by the relative size of the message
+    query: criteria that filters by a custom gmail query 
+    negated_query: criteria that filters by a custom negated gmail query
     """
     if add_labels is None and remove_labels is None:
         raise Exception # no label action to take
@@ -198,6 +252,20 @@ def create_filter(service, body: dict):
 # region Senders
 
 def label_senders(service, senders: list[dict]) -> None:
+    """
+    Given a list with valid 'sender' dicts, create a corresponding filter in
+    gmail that matches the inputs.
+
+    service: gmail build resource object
+    senders: a list of dicts found from the inputted json file that tells how 
+    to filter the senders.
+    The dicts need the following structure:
+    {
+        'email' : string,
+        'labels' : list[str],
+        'toInbox' : bool
+    }
+    """
     for profile in senders:
         email = profile['email']
         labels = profile['labels']
@@ -227,6 +295,20 @@ def label_senders(service, senders: list[dict]) -> None:
 # region Subjects
 
 def label_subjects(service, subjects: list[dict]) -> list:
+    """
+    Given a list with valid 'subject' dicts, create a corresponding filter in
+    gmail that matches the inputs.
+
+    service: gmail build resource object
+    subjects: a list of dicts found from the inputted json file that tells how 
+    to filter the subjects.
+    The dicts need the following structure:
+    {
+        'contains' : string,
+        'labels' : list[str],
+        'toInbox' : bool
+    }
+    """
     for sub in subjects:
         phrase = sub['contains']
         labels = sub['labels']
@@ -256,12 +338,24 @@ def label_subjects(service, subjects: list[dict]) -> list:
 # region Labels
 
 def get_existing_labels(service) -> list[dict]:
+    """
+    Queries gmail to find all labels that exist.
+
+    service: gmail build resource object
+    """
     results = service.users().labels().list(userId="me").execute()
     labels = results.get("labels", [])
     if not labels: raise 'No Labels'
     return labels
 
 def get_label_ids(service, labels: list[str]) -> list[str]:
+    """
+    Get the IDs of the given label names. If the label name does not have an
+    ID, that label is created and the new ID is returned.
+
+    service: gmail build resource object
+    labels: names of labels to get ID's of
+    """
     ids = []
     existing_labels = get_existing_labels(service)
     for label in labels:
@@ -281,6 +375,15 @@ def create_label(
         text_color: str = None, 
         background_color: str = None
         ) -> str:
+    """
+    Creates a gmail label with the given name and coloring scheme.
+
+    service: gmail build resource object
+    name: the name of the label to create
+    text_color: the hexcode of the color to color the label text with
+    background_color: the hexcode of the color to color the label background 
+    with
+    """
     body = { 
             'name' : name, 
             'color' : {
@@ -310,6 +413,16 @@ def update_label(
         text_color: str = None,
         background_color: str = None
     ) -> str:
+    """
+    Updates a gmail label with the given name and coloring scheme.
+
+    service: gmail build resource object
+    id: the ID of the label to change
+    name: the new name of the label
+    text_color: the hexcode of the color to color the label text with
+    background_color: the hexcode of the color to color the label background 
+    with
+    """
     if id is None:
         raise Exception # no id to update
     if name is None and text_color is None:
@@ -341,8 +454,21 @@ def update_label(
     )
     return result.get("id")
 
-
 def process_labels(service, labels: list[dict]) -> None:
+    """
+    Given a list with valid 'label' dicts, update labels with matching names.
+
+    service: gmail build resource object
+    labels: a list of dicts found from the inputted json file that tells how 
+    to update the labels.
+    The dicts need the following structure, with at least one updatable field:
+    {
+        'id' : string,
+        (optional) 'newName' : string,
+        (optional) 'textColor' : hex color string,
+        (optional) 'backgroundColor' : hex color string
+    }
+    """
     existing_labels = get_existing_labels(service)
     for lab in existing_labels:
         for new in labels:
@@ -379,21 +505,14 @@ def process_labels(service, labels: list[dict]) -> None:
 # Should ouptput a dict
 
 def get_json_data(path: str) -> dict:
+    """
+    Attempt to create a dictionary from a given json file.
+
+    path: the path to the json file
+    """
     with open(path, 'r') as file:
         return json.load(file)
     
-# endregion
-
-# region Gmail Calls
-
-def get_email_labels(file_name: str) -> dict[str, list[str]]: # TODO create func
-    result = {}
-    with open(file_name, 'r') as file:
-        while (line := file.readline()) != '':
-            vals = line.strip().split(',')
-            result[vals[0].strip()] = [tag.strip() for tag in vals[1:]]
-    return result
-
 # endregion
 
 def main() -> None:
