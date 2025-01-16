@@ -9,12 +9,18 @@ from googleapiclient.errors import HttpError
 import json
 import sys
 
+# region Constants
 # If modifying these scopes, delete the file token.json.
 SCOPES = [
     'https://www.googleapis.com/auth/gmail.labels', # create labels
     'https://www.googleapis.com/auth/gmail.settings.basic', # create filters
     'https://www.googleapis.com/auth/gmail.modify' # updating threads
     ]
+
+DEFAULT_TEXT_COLOR = '#000000'
+DEFAULT_BACKGROUND_COLOR = '#cccccc'
+
+# endregion
 
 # region Mail Threads
 def find_matching_threads(service, email: str=None, subject: str=None):
@@ -198,7 +204,8 @@ def label_senders(service, senders: list[dict]) -> None:
                 )
 
             try: create_filter(service, body)
-            except HttpError as error: print(f"An error occurred: {error}")
+            except HttpError as error: 
+                print(f"Couldn't label sender: {error.reason}")
                 
 # endregion
 
@@ -226,9 +233,132 @@ def label_subjects(service, subjects: list[dict]) -> list:
                 )
 
             try: create_filter(service, body)
-            except HttpError as error: print(f"An error occurred: {error}")
+            except HttpError as error: 
+                print(f"Couldn't label subject: {error.reason}")
 
 # endregion
+
+# region Labels
+
+def get_existing_labels(service) -> list[dict]:
+    results = service.users().labels().list(userId="me").execute()
+    labels = results.get("labels", [])
+    if not labels: raise 'No Labels'
+    return labels
+
+def get_label_ids(service, labels: list[str]) -> list[str]:
+    ids = []
+    existing_labels = get_existing_labels(service)
+    for label in labels:
+            found = False
+            for label_info in existing_labels:
+                if label == label_info['name']:
+                    ids.append(label_info['id'])
+                    found = True
+                    break
+            if not found: ids.append(create_label(service, label))
+            else: found = False
+    return ids
+
+def create_label(
+        service, 
+        name: str, 
+        text_color: str = None, 
+        background_color: str = None
+        ) -> str:
+    body = { 
+            'name' : name, 
+            'color' : {
+                'textColor' : DEFAULT_TEXT_COLOR,
+                'backgroundColor' : DEFAULT_BACKGROUND_COLOR
+            }
+        }
+
+    if text_color is not None:
+        body['color']['textColor'] = text_color
+    if background_color is not None:
+        body['color']['backgroundColor'] = background_color
+            
+    result = (
+        service
+        .users()
+        .labels()
+        .create(userId="me", body=body)
+        .execute()
+    )
+    return result.get("id")
+
+def update_label(
+        service, 
+        id: str, 
+        name: str = None, 
+        text_color: str = None,
+        background_color: str = None
+    ) -> str:
+    if id is None:
+        raise Exception # no id to update
+    if name is None and text_color is None:
+        raise Exception # nothing to update
+    body = {}
+    if name is not None:
+        body['name'] = name
+
+    if text_color is not None:
+        body['color'] = { 
+            'textColor' : text_color,
+            'backgroundColor' : DEFAULT_BACKGROUND_COLOR
+            }
+    if background_color is not None:
+        if text_color is not None: 
+            body['color']['backgroundColor'] = background_color
+        else:
+            body['color'] = { 
+                'textColor' :  DEFAULT_TEXT_COLOR,
+                'backgroundColor' : background_color 
+                }
+    
+    result = (
+        service
+        .users()
+        .labels()
+        .update(userId="me", id=id, body=body)
+        .execute()
+    )
+    return result.get("id")
+
+
+def process_labels(service, labels: list[dict]) -> None:
+    existing_labels = get_existing_labels(service)
+    for lab in existing_labels:
+        for new in labels:
+            if new['name'] == lab['name']:
+                try: 
+                    update_label(
+                        service, 
+                        lab['id'], 
+                        new.get('newName', None), 
+                        new.get('textColor', None),
+                        new.get('backgroundColor', None)
+                    )
+                except HttpError as error: 
+                    # Could be because newName property already exists
+                    print(
+                        f'''Error updating label {lab['id']} 
+                          {new.get('newName', None)}:
+                          \n\t{error.reason}'''
+                    )
+                finally:
+                    labels.remove(new)
+    for new in labels:
+        name = new.get('newName', new.get('name', ''))
+        if name == '': raise Exception # can't label without a proper name 
+        create_label(
+            service,
+            name,
+            new.get('textColor', None)
+            )
+
+#endregion
 
 # region Input
 # Should ouptput a dict
@@ -249,34 +379,9 @@ def get_email_labels(file_name: str) -> dict[str, list[str]]: # TODO create func
             result[vals[0].strip()] = [tag.strip() for tag in vals[1:]]
     return result
 
-def get_existing_labels(service) -> list[str]:
-    results = service.users().labels().list(userId="me").execute()
-    labels = results.get("labels", [])
-    if not labels: raise 'No Labels'
-    return labels
-
-def get_label_ids(service, labels: list[str]):
-    ids = []
-    existing_labels = get_existing_labels(service)
-    for label in labels:
-            found = False
-            for label_info in existing_labels:
-                if label == label_info['name']:
-                    ids.append(label_info['id'])
-                    found = True
-                    break
-            if not found: ids.append(create_label(service, label))
-            else: found = False
-    return ids
-
-def create_label(service, name: str) -> str:
-    body = { 'name' : name }
-    result = service.users().labels().create(userId="me", body=body).execute()
-    return result.get("id")
-
 # endregion
 
-def main():
+def main() -> None:
     """Shows basic usage of the Gmail API.
     Lists the user's Gmail labels.
     """
@@ -315,12 +420,17 @@ def main():
     except HttpError as error:
         print(f"An error occurred: {error}")
 
+    try: process_labels(service, data['labels'])
+    except HttpError as error: 
+        print(f"An error occurred processing labels section: {error}")
 
     try: label_senders(service, data['senders'])
-    except: print(f"An error occurred creating filter for senders: {error}")
+    except HttpError as error: 
+        print(f"An error occurred creating filter for senders: {error}")
     
     try: label_subjects(service, data['subjects'])
-    except: print(f"An error occurred creating filter for subjects: {error}")
+    except HttpError as error: 
+        print(f"An error occurred creating filter for subjects: {error}")
     
     apply_sender_filters(service, data['senders'])
     apply_subject_filters(service, data['subjects'])
