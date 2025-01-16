@@ -11,6 +11,9 @@ Takes a formatted JSON file as an input to determine what to create or update.
 
 Requires prior authorization of the desired Gmail account to edit.
 
+## Requirements
+* Python 3.12 or compatible
+* Pip packages specified in <a href="requirements.txt">requirements.txt</a>
 
 ## Usage
 A valid JSON is required to run the script; see the <a href="#json">JSON</a> 
@@ -20,6 +23,7 @@ python rules.py path/to/rules.json
 ```
 
 <a id="json"> </a>
+
 ## JSON Format
 The following is an example JSON file to show some of the possible combinations
 for inputs. The keys "labels", "senders", and "subjects" are required to exist
