@@ -263,27 +263,32 @@ def label_senders(service, senders: list[dict]) -> None:
     {
         'email' : string,
         'labels' : list[str],
-        'toInbox' : bool
+        'toInbox' : bool,
+        'leaveUnread' : bool
     }
     """
     for profile in senders:
         email = profile['email']
         labels = profile['labels']
         to_inbox = profile['toInbox']
+        left_unread = profile['leaveUnread']
         label_ids = get_label_ids(service, labels)
 
         for id in label_ids:
             body = {}
+
+            flagLabels = []
             if not to_inbox:
-                body = create_filter_body(
-                    add_labels=[id], 
-                    remove_labels=['INBOX'], 
-                    sender=email
-                    )
-            else: 
-                body = create_filter_body(
-                    add_labels=[id], 
-                    sender=email
+                flagLabels.append('INBOX')
+            if not left_unread:
+                flagLabels.append('UNREAD')            
+            if len(flagLabels) == 0:
+                flagLabels = None
+
+            body = create_filter_body(
+                add_labels=[id], 
+                remove_labels=flagLabels, 
+                sender=email
                 )
 
             try: create_filter(service, body)
@@ -306,27 +311,32 @@ def label_subjects(service, subjects: list[dict]) -> list:
     {
         'contains' : string,
         'labels' : list[str],
-        'toInbox' : bool
+        'toInbox' : bool,
+        'leaveUnread' : bool
     }
     """
     for sub in subjects:
         phrase = sub['contains']
         labels = sub['labels']
         to_inbox = sub['toInbox']
+        left_unread = sub['leaveUnread']
         label_ids = get_label_ids(service, labels)
 
         for id in label_ids:
             body = {}
+
+            flagLabels = []
             if not to_inbox:
-                body = create_filter_body(
-                    add_labels=[id], 
-                    remove_labels=['INBOX'], 
-                    subject=phrase
-                    )
-            else: 
-                body = create_filter_body(
-                    add_labels=[id], 
-                    subject=phrase
+                flagLabels.append('INBOX')
+            if not left_unread:
+                flagLabels.append('UNREAD')
+            if len(flagLabels) == 0:
+                flagLabels = None
+
+            body = create_filter_body(
+                add_labels=[id], 
+                remove_labels=flagLabels, 
+                subject=phrase
                 )
 
             try: create_filter(service, body)

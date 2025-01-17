@@ -51,14 +51,16 @@ but do not need to be filled.
                 "Development/Testing",
                 "NewTag"
                 ], 
-            "toInbox" : false 
+            "toInbox" : false,
+            "leaveUnread" : false
         }
     ],
     "subjects" : [
         {
             "contains" : "Hello World" ,
             "labels" : [ "Development" ],
-            "toInbox" : false 
+            "toInbox" : false,
+            "leaveUnread" : false
         }
     ]
 }
