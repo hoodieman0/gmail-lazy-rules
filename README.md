@@ -70,6 +70,10 @@ but do not need to be filled.
 To create sublabels, use the directory format. That is: 
 "parentLabel/childLabel/grandchildLabel".
 
+The "email" and "contains" fields can take wildcard characters, for example: 
+```"email" : "*@accounts.google.com"``` would create a filter for all emails 
+that have the extension @accounts.google.com.
+
 The possible values for "textColor" and 
 "backgroundColor" can be found in the <a href="docs/colors.md">colors.md</a> 
 files in the docs folder.
